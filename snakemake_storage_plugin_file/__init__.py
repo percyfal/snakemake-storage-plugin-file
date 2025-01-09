@@ -12,6 +12,7 @@ from snakemake_interface_storage_plugins.storage_provider import (  # noqa: F401
 )
 from snakemake_interface_storage_plugins.storage_object import (
     StorageObjectRead,
+    StorageObjectWrite,
     StorageObjectGlob,
     retry_decorator,
 )
@@ -42,7 +43,13 @@ class StorageProvider(StorageProviderBase):
     def example_queries(cls) -> List[ExampleQuery]:
         """Return an example queries with description for this storage provider (at
         least one)."""
-        ...
+        return [
+            ExampleQuery(
+                query="file://test/test.txt",
+                type=QueryType.INPUT,
+                description="A file URL",
+            )
+        ]
 
     def rate_limiter_key(self, query: str, operation: Operation) -> Any:
         """Return a key for identifying a rate limiter given a query and an operation.
@@ -51,13 +58,7 @@ class StorageProvider(StorageProviderBase):
         E.g. for a storage provider like http that would be the host name.
         For s3 it might be just the endpoint URL.
         """
-        return [
-            ExampleQuery(
-                query="file://test/test.txt",
-                type=QueryType.INPUT,
-                description="A file URL",
-            )
-        ]
+        ...
 
     def default_max_requests_per_second(self) -> float:
         """Return the default maximum number of requests per second for this storage
@@ -101,6 +102,7 @@ class StorageProvider(StorageProviderBase):
 # from the list of inherited items.
 class StorageObject(
     StorageObjectRead,
+    StorageObjectWrite,
     StorageObjectGlob,
 ):
     # For compatibility with future changes, you should not overwrite the __init__
@@ -147,7 +149,11 @@ class StorageObject(
     def local_suffix(self) -> str:
         """Return a unique suffix for the local path, determined from self.query."""
         parsed = urlparse(self.query)
-        return f"{parsed.netloc}{parsed.path}"
+        suffix = parsed.path
+        if suffix.startswith("/"):
+            # convert absolute path to unique relative path
+            suffix = f"__abspath__/{suffix[1:]}"
+        return suffix
 
     def cleanup(self):
         """Perform local cleanup of any remainders of the storage object."""
@@ -161,7 +167,6 @@ class StorageObject(
     @retry_decorator
     def exists(self) -> bool:
         # return True if the object exists
-        print("Path and scheme: ", self.query_path, self.scheme)
         return self.query_path.exists()
 
     @retry_decorator
@@ -177,7 +182,7 @@ class StorageObject(
     @retry_decorator
     def retrieve_object(self):
         # Ensure that the object is accessible locally under self.local_path()
-        ...
+        self.local_path().symlink_to(self.query_path)
 
     # The following to methods are only required if the class inherits from
     # StorageObjectReadWrite.
@@ -186,6 +191,7 @@ class StorageObject(
     def store_object(self):
         # Ensure that the object is stored at the location specified by
         # self.local_path().
+        # Ensure that the object is accessible locally under self.local_path()
         ...
 
     @retry_decorator
