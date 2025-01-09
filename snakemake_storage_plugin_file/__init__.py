@@ -1,12 +1,8 @@
 import os
 from pathlib import Path
-import shutil
-import subprocess
-from dataclasses import dataclass, field
 from typing import Any, Iterable, Optional, List
 from urllib.parse import urlparse
 
-from snakemake_interface_storage_plugins.settings import StorageProviderSettingsBase
 from snakemake_interface_storage_plugins.storage_provider import (  # noqa: F401
     StorageProviderBase,
     StorageQueryValidationResult,
@@ -16,16 +12,15 @@ from snakemake_interface_storage_plugins.storage_provider import (  # noqa: F401
 )
 from snakemake_interface_storage_plugins.storage_object import (
     StorageObjectRead,
-    StorageObjectWrite,
     StorageObjectGlob,
     retry_decorator,
 )
-from snakemake_interface_storage_plugins.io import IOCacheStorageInterface
 from snakemake_interface_storage_plugins.io import (
     IOCacheStorageInterface,
     Mtime,
+    get_constant_prefix,
 )
-from snakemake_interface_common.utils import lutime
+
 
 # Required:
 # Implementation of your storage provider
@@ -64,7 +59,6 @@ class StorageProvider(StorageProviderBase):
             )
         ]
 
-
     def default_max_requests_per_second(self) -> float:
         """Return the default maximum number of requests per second for this storage
         provider."""
@@ -97,8 +91,7 @@ class StorageProvider(StorageProviderBase):
         return StorageQueryValidationResult(
             query=query,
             valid=True,
-        ) 
-
+        )
 
 
 # Required:
@@ -108,8 +101,7 @@ class StorageProvider(StorageProviderBase):
 # from the list of inherited items.
 class StorageObject(
     StorageObjectRead,
-    #StorageObjectWrite,
-    StorageObjectGlob
+    StorageObjectGlob,
 ):
     # For compatibility with future changes, you should not overwrite the __init__
     # method. Instead, use __post_init__ to set additional attributes and initialize
@@ -120,11 +112,9 @@ class StorageObject(
         # Alternatively, you can e.g. prepare a connection to your storage backend here.
         # and set additional attributes.
         parsed = urlparse(self.query)
-        #self.query = f"{parsed.netloc}{parsed.path}"
         query = f"{parsed.netloc}{parsed.path}"
         self.query_path = Path(query)
         self.scheme = parsed.scheme
-
 
     async def inventory(self, cache: IOCacheStorageInterface):
         """From this file, try to find as much existence and modification date
@@ -148,7 +138,6 @@ class StorageObject(
         cache.mtime[key] = Mtime(storage=self._stat_to_mtime(lstat))
         cache.size[key] = stat.st_size
         cache.exists_in_storage[key] = True
-
 
     def get_inventory_parent(self) -> Optional[str]:
         """Return the parent directory of this object."""
